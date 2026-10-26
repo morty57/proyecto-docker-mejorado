@@ -1,0 +1,9 @@
+{
+  "name": "proyecto-docker-visualizer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visualizador de resultados del worker",
+  "main": "server.js",
+  "scripts": {"start": "node server.js"},
+  "dependencies": {"express": "4.21.2"}
+}

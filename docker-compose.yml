@@ -1,0 +1,102 @@
+services:
+  web:
+    build:
+      context: ./app
+    image: ${DOCKERHUB_USERNAME:-dockeruser}/proyecto-docker-web:${IMAGE_TAG:-latest}
+    container_name: proyecto_web
+    ports:
+      - "5001:5000"
+    environment:
+      DB_HOST: db
+      DB_NAME: ${POSTGRES_DB:-appdb}
+      DB_USER: ${POSTGRES_USER:-appuser}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-apppassword}
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: proyecto_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apppassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: proyecto_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./worker
+    image: ${DOCKERHUB_USERNAME:-dockeruser}/proyecto-docker-worker:${IMAGE_TAG:-latest}
+    container_name: proyecto_worker
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RESULTS_FILE: /data/results.json
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - results_data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  visualizer:
+    build:
+      context: ./visualizer
+    image: ${DOCKERHUB_USERNAME:-dockeruser}/proyecto-docker-visualizer:${IMAGE_TAG:-latest}
+    container_name: proyecto_visualizer
+    ports:
+      - "3000:3000"
+    environment:
+      RESULTS_FILE: /data/results.json
+      PORT: 3000
+    depends_on:
+      - worker
+    volumes:
+      - results_data:/data:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  results_data:
